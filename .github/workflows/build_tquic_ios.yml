@@ -61,7 +61,7 @@ jobs:
 
       # 9. Upload artifact
       - name: Upload SDK artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: tquic-ios-sdk-v1.6.0
           path: TQUIC-iOS-v1.6.0.zip
