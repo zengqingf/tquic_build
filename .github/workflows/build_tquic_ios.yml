@@ -1,90 +1,90 @@
-name: Build TQUIC v1.6.0 iOS SDK
+name: Build TQUIC iOS10
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
-  build-ios:
-    runs-on: macos-latest
-    env:
-      RUSTUP_HOME: ${{ github.workspace }}/.rustup
-      CARGO_HOME: ${{ github.workspace }}/.cargo
+  build:
+    runs-on: macos-14
 
     steps:
-      # 1️⃣ Checkout v1.6.0 tag with submodules
-      - name: Checkout TQUIC v1.6.0
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          repository: Tencent/tquic
-          ref: v1.6.0
-          submodules: recursive
 
-      # 2️⃣ Install Xcode CLI tools
-      - name: Install Xcode Command Line Tools
-        run: xcode-select --install || echo "Already installed"
-
-      # 3️⃣ Accept Xcode license
-      - name: Accept Xcode license
-        run: sudo xcodebuild -license accept
-
-      # 4️⃣ Set SDKROOT
-      - name: Set SDKROOT
-        run: echo "SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)" >> $GITHUB_ENV
-
-      # 5️⃣ Install Rust stable
+      # ----------------------------
+      # 1️⃣ 安装 Rust
+      # ----------------------------
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          override: true
+          targets: aarch64-apple-ios
 
-      # 6️⃣ Add iOS Rust targets
-      - name: Add iOS targets
+      # ----------------------------
+      # 2️⃣ Clone TQUIC v1.6.0
+      # ----------------------------
+      - name: Clone TQUIC
         run: |
-          rustup target add aarch64-apple-ios x86_64-apple-ios aarch64-apple-ios-sim
+          git clone --branch v1.6.0 https://github.com/Tencent/tquic.git
 
-      # 7️⃣ Install cargo-lipo
-      - name: Install cargo-lipo
-        run: cargo install cargo-lipo
-
-      # 8️⃣ Cache Rust target directory to speed up builds
-      - name: Cache Rust target
-        uses: actions/cache@v3
-        with:
-          path: ${{ github.workspace }}/.cargo/target_ios
-          key: tquic-ios-target-${{ hashFiles('**/Cargo.toml') }}
-
-      # 9️⃣ Build iOS universal library (verbose)
-      - name: Build TQUIC universal library
+      # ----------------------------
+      # 3️⃣ Clone OpenSSL
+      # ----------------------------
+      - name: Clone OpenSSL
         run: |
-          mkdir -p target/universal
-          cargo lipo --features ffi --release --verbose 2>&1 | tee build.log
+          git clone https://github.com/openssl/openssl.git
+          cd openssl
+          git checkout openssl-3.2.0
 
-      # 🔟 Upload build log
-      - name: Upload build log
+      # ----------------------------
+      # 4️⃣ 编译 OpenSSL (iOS10 arm64)
+      # ----------------------------
+      - name: Build OpenSSL (iOS10 arm64)
+        run: |
+          set -e
+
+          IOS_MIN=10.0
+          BUILD_DIR=$PWD/openssl-ios
+          mkdir -p $BUILD_DIR
+
+          cd openssl
+
+          export CROSS_TOP=$(xcode-select -p)/Platforms/iPhoneOS.platform/Developer
+          export CROSS_SDK=iPhoneOS.sdk
+          export IPHONEOS_DEPLOYMENT_TARGET=$IOS_MIN
+
+          ./Configure ios64-cross no-shared no-dso \
+            --prefix=$BUILD_DIR \
+            -fembed-bitcode \
+            -mios-version-min=$IOS_MIN
+
+          make -j$(sysctl -n hw.ncpu)
+          make install_sw
+
+      # ----------------------------
+      # 5️⃣ 编译 TQUIC
+      # ----------------------------
+      - name: Build TQUIC (iOS arm64)
+        run: |
+          set -e
+
+          export IPHONEOS_DEPLOYMENT_TARGET=10.0
+
+          export OPENSSL_DIR=$PWD/openssl-ios
+          export OPENSSL_LIB_DIR=$OPENSSL_DIR/lib
+          export OPENSSL_INCLUDE_DIR=$OPENSSL_DIR/include
+
+          cd tquic
+
+          cargo build \
+            --target aarch64-apple-ios \
+            --release \
+            --features vendored-openssl
+
+      # ----------------------------
+      # 6️⃣ 输出产物
+      # ----------------------------
+      - name: Upload libtquic.a
         uses: actions/upload-artifact@v4
         with:
-          name: tquic-build-log
-          path: build.log
-
-      # 1️⃣1️⃣ Prepare SDK structure
-      - name: Prepare SDK layout
-        run: |
-          mkdir -p TQUIC-iOS/lib
-          mkdir -p TQUIC-iOS/include
-          cp target/universal/release/*.a TQUIC-iOS/lib/libtquic.a
-          cp -R include/* TQUIC-iOS/include/
-
-      # 1️⃣2️⃣ Zip SDK
-      - name: Zip SDK
-        run: zip -r TQUIC-iOS-v1.6.0.zip TQUIC-iOS
-
-      # 1️⃣3️⃣ Upload SDK artifact
-      - name: Upload SDK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tquic-ios-sdk-v1.6.0
-          path: TQUIC-iOS-v1.6.0.zip
+          name: libtquic-ios-arm64
+          path: tquic/target/aarch64-apple-ios/release/libtquic.a
