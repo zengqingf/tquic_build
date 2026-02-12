@@ -33,9 +33,10 @@ jobs:
 
       # 4️⃣ Set SDKROOT
       - name: Set SDKROOT
+        id: sdk
         run: |
-          export SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
-          echo "SDKROOT=$SDKROOT"
+          echo "SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)" >> $GITHUB_ENV
+          echo "iOS SDKROOT set to $(xcrun --sdk iphoneos --show-sdk-path)"
 
       # 5️⃣ Install Rust stable
       - name: Install Rust
@@ -56,10 +57,17 @@ jobs:
       # 8️⃣ Build iOS universal library (verbose) ✅ Deployment target set here
       - name: Build TQUIC universal library
         run: |
-          echo "Setting minimum iOS deployment target for this shell"
-          export IPHONEOS_DEPLOYMENT_TARGET=10.0
-          echo "IPHONEOS_DEPLOYMENT_TARGET=$IPHONEOS_DEPLOYMENT_TARGET"
-          cargo lipo --features ffi --release --verbose
+          echo "Building TQUIC universal library with minimum iOS deployment target 10.0"
+          set -o pipefail
+          cargo lipo \
+            --release \
+            --features ffi \
+            --verbose \
+            --targets aarch64-apple-ios,x86_64-apple-ios,aarch64-apple-ios-sim \
+            || (echo "BUILD FAILED"; tail -n 50 target/universal/release/build/tquic-*/output.log; exit 1)
+        env:
+          IPHONEOS_DEPLOYMENT_TARGET: 10.0
+          SDKROOT: ${{ env.SDKROOT }}
 
       # 9️⃣ Prepare SDK structure
       - name: Prepare SDK layout
