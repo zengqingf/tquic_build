@@ -24,8 +24,7 @@ jobs:
 
       # 2️⃣ Install Xcode CLI tools
       - name: Install Xcode Command Line Tools
-        run: |
-          xcode-select --install || echo "Xcode CLI already installed"
+        run: xcode-select --install || echo "Already installed"
 
       # 3️⃣ Accept Xcode license
       - name: Accept Xcode license
@@ -33,7 +32,7 @@ jobs:
 
       # 4️⃣ Set SDKROOT
       - name: Set SDKROOT
-        run: export SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
+        run: echo "SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)" >> $GITHUB_ENV
 
       # 5️⃣ Install Rust stable
       - name: Install Rust
@@ -51,11 +50,27 @@ jobs:
       - name: Install cargo-lipo
         run: cargo install cargo-lipo
 
-      # 8️⃣ Build iOS universal library (verbose)
-      - name: Build TQUIC universal library
-        run: cargo lipo --features ffi --release --verbose
+      # 8️⃣ Cache Rust target directory to speed up builds
+      - name: Cache Rust target
+        uses: actions/cache@v3
+        with:
+          path: ${{ github.workspace }}/.cargo/target_ios
+          key: tquic-ios-target-${{ hashFiles('**/Cargo.toml') }}
 
-      # 9️⃣ Prepare SDK structure
+      # 9️⃣ Build iOS universal library (verbose)
+      - name: Build TQUIC universal library
+        run: |
+          mkdir -p target/universal
+          cargo lipo --features ffi --release --verbose 2>&1 | tee build.log
+
+      # 🔟 Upload build log
+      - name: Upload build log
+        uses: actions/upload-artifact@v4
+        with:
+          name: tquic-build-log
+          path: build.log
+
+      # 1️⃣1️⃣ Prepare SDK structure
       - name: Prepare SDK layout
         run: |
           mkdir -p TQUIC-iOS/lib
@@ -63,11 +78,11 @@ jobs:
           cp target/universal/release/*.a TQUIC-iOS/lib/libtquic.a
           cp -R include/* TQUIC-iOS/include/
 
-      # 🔟 Zip SDK
+      # 1️⃣2️⃣ Zip SDK
       - name: Zip SDK
         run: zip -r TQUIC-iOS-v1.6.0.zip TQUIC-iOS
 
-      # 1️⃣1️⃣ Upload artifact
+      # 1️⃣3️⃣ Upload SDK artifact
       - name: Upload SDK artifact
         uses: actions/upload-artifact@v4
         with:
