@@ -37,10 +37,6 @@ jobs:
           export SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
           echo "SDKROOT=$SDKROOT"
 
-      # 4.1️⃣ Set minimum iOS deployment target
-      - name: Set iOS deployment target
-        run: echo "Setting IPHONEOS_DEPLOYMENT_TARGET=10.0" && export IPHONEOS_DEPLOYMENT_TARGET=10.0
-
       # 5️⃣ Install Rust stable
       - name: Install Rust
         uses: actions-rs/toolchain@v1
@@ -57,11 +53,13 @@ jobs:
       - name: Install cargo-lipo
         run: cargo install cargo-lipo
 
-      # 8️⃣ Build iOS universal library (verbose)
+      # 8️⃣ Build iOS universal library (verbose) ✅ Deployment target set here
       - name: Build TQUIC universal library
-        env:
-          IPHONEOS_DEPLOYMENT_TARGET: 10.0   # ✅ 确保编译时生效
-        run: cargo lipo --features ffi --release --verbose
+        run: |
+          echo "Setting minimum iOS deployment target for this shell"
+          export IPHONEOS_DEPLOYMENT_TARGET=10.0
+          echo "IPHONEOS_DEPLOYMENT_TARGET=$IPHONEOS_DEPLOYMENT_TARGET"
+          cargo lipo --features ffi --release --verbose
 
       # 9️⃣ Prepare SDK structure
       - name: Prepare SDK layout
