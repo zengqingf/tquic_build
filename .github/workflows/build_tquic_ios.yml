@@ -14,7 +14,7 @@ jobs:
       CARGO_HOME: ${{ github.workspace }}/.cargo
 
     steps:
-      # 1. Checkout v1.6.0 tag with submodules
+      # 1️⃣ Checkout v1.6.0 tag with submodules
       - name: Checkout TQUIC v1.6.0
         uses: actions/checkout@v4
         with:
@@ -22,47 +22,54 @@ jobs:
           ref: v1.6.0
           submodules: recursive
 
-      # 2. Install Xcode CLI tools
+      # 2️⃣ Install Xcode CLI tools
       - name: Install Xcode Command Line Tools
         run: |
           xcode-select --install || echo "Xcode CLI already installed"
 
-      # 3. Install Rust stable
+      # 3️⃣ Accept Xcode license
+      - name: Accept Xcode license
+        run: sudo xcodebuild -license accept
+
+      # 4️⃣ Set SDKROOT
+      - name: Set SDKROOT
+        run: export SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
+
+      # 5️⃣ Install Rust stable
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true
 
-      # 4. Add iOS Rust targets
+      # 6️⃣ Add iOS Rust targets
       - name: Add iOS targets
         run: |
-          rustup target add aarch64-apple-ios x86_64-apple-ios
+          rustup target add aarch64-apple-ios x86_64-apple-ios aarch64-apple-ios-sim
 
-      # 5. Install cargo-lipo
+      # 7️⃣ Install cargo-lipo
       - name: Install cargo-lipo
         run: cargo install cargo-lipo
 
-      # 6. Build TQUIC universal iOS library
-      - name: Build iOS universal library
-        run: cargo lipo --features ffi --release
+      # 8️⃣ Build iOS universal library (verbose)
+      - name: Build TQUIC universal library
+        run: cargo lipo --features ffi --release --verbose
 
-      # 7. Prepare SDK layout
-      - name: Prepare SDK structure
+      # 9️⃣ Prepare SDK structure
+      - name: Prepare SDK layout
         run: |
           mkdir -p TQUIC-iOS/lib
           mkdir -p TQUIC-iOS/include
           cp target/universal/release/*.a TQUIC-iOS/lib/libtquic.a
           cp -R include/* TQUIC-iOS/include/
 
-      # 8. Zip SDK
+      # 🔟 Zip SDK
       - name: Zip SDK
         run: zip -r TQUIC-iOS-v1.6.0.zip TQUIC-iOS
 
-      # 9. Upload artifact
+      # 1️⃣1️⃣ Upload artifact
       - name: Upload SDK artifact
         uses: actions/upload-artifact@v4
         with:
           name: tquic-ios-sdk-v1.6.0
           path: TQUIC-iOS-v1.6.0.zip
-
